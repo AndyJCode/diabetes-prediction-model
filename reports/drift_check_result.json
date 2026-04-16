@@ -1,0 +1,46 @@
+{
+  "total_features": 9,
+  "drifted_features": 0,
+  "drift_share": 0.0,
+  "dataset_drift": false,
+  "status": "ok",
+  "drifted_feature_names": [],
+  "column_results": {
+    "Pregnancies": {
+      "p_value": 0.9512,
+      "drift_detected": false
+    },
+    "Glucose": {
+      "p_value": 0.7018,
+      "drift_detected": false
+    },
+    "BloodPressure": {
+      "p_value": 0.1111,
+      "drift_detected": false
+    },
+    "SkinThickness": {
+      "p_value": 0.7968,
+      "drift_detected": false
+    },
+    "Insulin": {
+      "p_value": 0.2457,
+      "drift_detected": false
+    },
+    "BMI": {
+      "p_value": 0.6247,
+      "drift_detected": false
+    },
+    "DiabetesPedigreeFunction": {
+      "p_value": 0.3619,
+      "drift_detected": false
+    },
+    "Age": {
+      "p_value": 0.5065,
+      "drift_detected": false
+    },
+    "Outcome": {
+      "p_value": 0.7905,
+      "drift_detected": false
+    }
+  }
+}

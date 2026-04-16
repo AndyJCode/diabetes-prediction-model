@@ -1,0 +1,46 @@
+# Diabetes classification — unified project configuration
+
+project_name: diabetes_classification
+experiment_name: diabetes_classification
+data_path: data/diabetes.csv
+random_state: 12345
+selection_metric: roc_auc   # metric used to pick the best model
+
+mlflow:
+  tracking_uri: mlruns       # local folder; change to a remote URI for team use
+
+# ── Models ───────────────────────────────────────────────────────
+# All models below will be trained and compared. The best is selected
+# by `selection_metric` above.
+
+models:
+  - model_type: random_forest
+    rf_n_estimators: 100
+    rf_max_depth: null        # null = grow until leaves are pure
+    rf_bootstrap: true
+    class_weight: null        # null = uniform; use "balanced" for imbalanced data
+
+  - model_type: gradient_boosting
+    gb_n_estimators: 100
+    gb_learning_rate: 0.1
+    gb_max_depth: 3
+
+  - model_type: logistic_regression
+    lr_C: 1.0
+    lr_max_iter: 1000
+    class_weight: null
+
+  - model_type: neural_network
+    nn_hidden_layer_sizes: [100, 50]
+    nn_learning_rate_init: 0.001
+    nn_max_iter: 200
+
+  - model_type: xgboost
+    xgb_n_estimators: 100
+    xgb_learning_rate: 0.1
+    xgb_max_depth: 3
+
+  - model_type: lightgbm
+    lgbm_n_estimators: 100
+    lgbm_learning_rate: 0.1
+    lgbm_max_depth: -1        # -1 = no limit
