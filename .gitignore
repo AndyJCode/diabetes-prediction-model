@@ -2,7 +2,9 @@
 .env
 
 # ── Data & model artifacts (use DVC or download separately) ──────
-data/
+data/diabetes.csv
+data/reference.csv
+data/current.csv
 best_model.pkl
 *.pkl
 *.joblib
