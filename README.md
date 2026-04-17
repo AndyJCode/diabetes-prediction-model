@@ -63,6 +63,8 @@ python -m streamlit run app.py
 ```
 Type your health info in plain English, for example:
 > *"I'm 45 years old, BMI 28, glucose 140, blood pressure 80, 2 pregnancies, skin thickness 20, insulin 85, pedigree score 0.5"*
+Edge case
+> *"I'm 45 years old, im 160 pounds, idk the rest"*
 
 The app asks for anything that's missing, runs the model, and explains the result.
 
@@ -155,16 +157,16 @@ lightgbm                    0.7532      0.6136      0.5625      0.5870      0.82
 - How to build a full end-to-end ML pipeline from preprocessing to deployment.
 - How to think through which EDA steps actually matter for a given dataset.
 - Why the scaler has to be saved alongside the model — otherwise inference breaks.
-- How to structure configs so nothing is hardcoded and models can be swapped without touching the code.
-- MLflow made it so much easier to track every run, compare models, and reproduce results.
-- Integrating an LLM was the most confusing part for me. The two-call pattern (extract → predict → explain) was completely new. Once I got it working though, I realized it's actually a pretty reusable pattern for any classification problem.
+- How to structure configs so nothing is hardcoded and models can be swapped without touching the code, but it was vey confusing and the structure was messy.
+- MLflow made it so much easier to track every run, compare models, and reproduce results, though i ran into some issues of it not tracking properly.
+- Integrating an LLM was the most confusing part for me. The two-call pattern (extract → predict → explain) was completely new.this is a reusable pattern for any classification problem.
 
 **What was challenging:**
-- Getting the LLM to output clean JSON for all 8 features took a lot of prompt engineering. The model kept either guessing missing values or wrapping the JSON in code fences.
-- Keeping context across multiple chat turns was tricky. The LLM would lose values mentioned earlier in the conversation. I ended up storing extracted features in session state and only asking the LLM to pull values from the latest message.
-- Figuring out which Nebius model to use. Some models are "thinking" models that return reasoning tokens instead of a normal response, which broke the app in a confusing way.
-- Structuring the project across multiple files and configs was overwhelming at times. I kept running into path issues and mismatched names.
-- Going back to Docker and Streamlit after not using them for a while.
+- Getting the LLM to output clean JSON for all 8 features took a lot of prompt engineering. The model kept either guessing missing values or wrapping the JSON in code fences and would not print anything.
+- Keeping context across multiple chat turns was tricky. The LLM would lose values mentioned earlier in the conversation(context). I ended up storing extracted features in session state and only asking the LLM to pull values from the latest message.
+- Figuring out which Nebius model to use. Some models are "thinking" models that return reasoning  instead of a normal response, which broke the app many times in a confusing way.
+- Structuring the project across multiple files and configs was confusing and hard. I kept running into path issues and mismatched names.
+- Going back to Docker and Streamlit after not using them since thier sprints.
 
 **What I would improve with more time:**
 - Hyperparameter tuning to push the model metrics higher, especially recall.
