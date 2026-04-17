@@ -1,0 +1,55 @@
+name: ML Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download dataset
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          pip install kaggle
+          kaggle datasets download -d uciml/pima-indians-diabetes-database -p data --unzip
+          mv data/diabetes.csv data/diabetes.csv 2>/dev/null || true
+
+      - name: Train models
+        run: python src/train.py
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+      - name: Run drift detection
+        run: |
+          python -c "
+          import pandas as pd
+          df = pd.read_csv('data/diabetes.csv')
+          split = int(len(df) * 0.7)
+          df.iloc[:split].to_csv('data/reference.csv', index=False)
+          df.iloc[split:].to_csv('data/current.csv', index=False)
+          "
+          python detect_drift.py data/reference.csv data/current.csv
+
+      - name: Upload drift report
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: reports/drift_check_report.html
