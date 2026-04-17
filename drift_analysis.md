@@ -11,31 +11,27 @@
 
 ## Summary
 
-| Metric | Value |
-|---|---|
-| Total features checked | 9 |
-| Features with drift detected | 0 |
-| Drift share | 0.0% |
-| Dataset drift | No |
-| Overall status | **OK** |
-
-No drift was detected in any feature. All p-values are well above the 0.05 significance threshold, indicating that the reference and current splits come from the same underlying distribution — which is expected since both are drawn from the same static dataset.
-
+No drift was detected in any feature. most p-values are above the 0.05 significance threshold, indicating that the reference and current splits come from the same underlying distribution from the same static data
 ---
 
 ## Per-Feature Results
 
-| Feature | p-value | Drift Detected |
-|---|---|---|
-| Pregnancies | 0.9512 | No |
-| Glucose | 0.7018 | No |
-| BloodPressure | 0.1111 | No |
-| SkinThickness | 0.7968 | No |
-| Insulin | 0.2457 | No |
-| BMI | 0.6247 | No |
-| DiabetesPedigreeFunction | 0.3619 | No |
-| Age | 0.5065 | No |
-| Outcome (target) | 0.7905 | No |
+Features drifted: 0/9 (0.0%)
+Dataset drift:    False
+Status:           OK
+
+Per-feature p-values (K-S test, threshold=0.05):
+  Feature                         p-value   Drift
+  -----------------------------------------------
+  Pregnancies                      0.9512      no
+  Glucose                          0.7018      no
+  BloodPressure                    0.1111      no
+  SkinThickness                    0.7968      no
+  Insulin                          0.2457      no
+  BMI                              0.6247      no
+  DiabetesPedigreeFunction         0.3619      no
+  Age                              0.5065      no
+  Outcome                          0.7905      no
 
 The lowest p-value was **BloodPressure (0.1111)**, which is still comfortably above the threshold. All other features show high p-values (>0.24), confirming strong distributional consistency across splits.
 
