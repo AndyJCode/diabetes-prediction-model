@@ -42,7 +42,7 @@ BloodPressure had the lowest p-value at 0.1111, but that's still comfortably abo
 
 ## What This Means in Practice
 
-The fact that no drift showed up makes sense. This dataset is a curated, one-time snapshot from a single study, not a live data stream. Both splits were drawn from the same source so of course they look the same.
+No drift showed up. This dataset is a one-time snapshot from a single study, not a live data stream. Both splits were drawn from the same source so they look the same.
 
 In a real deployment though, drift actually matters. Here's how it would work:
 
