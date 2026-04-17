@@ -147,6 +147,8 @@ def run_all_experiments(config_path: str = 'configs/config.yaml') -> Optional[st
     X_train, X_test, y_train, y_test, scaler = preprocess_data(data_path)
     data_version = compute_data_version(data_path)
 
+    db_path = Path(__file__).parent.parent / "mlflow.db"
+    mlflow.set_tracking_uri(f"sqlite:///{db_path}")
     mlflow.set_experiment(config.get('experiment_name', 'diabetes_classification'))
 
     results: List[Tuple[str, str, object, Dict]] = []

@@ -3,9 +3,10 @@ Diabetes Risk Prediction — Streamlit chat app powered by Nebius AI Studio + a 
 
 How it works:
   1. User describes themselves in plain English.
-  2. Llama (via Nebius) extracts the 8 diabetes features as JSON (or asks for missing ones).
-  3. The best trained model runs inference on the scaled features.
-  4. Llama turns the raw prediction into a clear, human-friendly explanation.
+  2. DeepSeek (via Nebius) extracts any new feature values from each message.
+  3. Extracted values accumulate in session state across turns.
+  4. Once all 8 features are collected, the best trained model runs inference.
+  5. DeepSeek turns the raw prediction into a clear, human-friendly explanation.
 """
 
 import os
@@ -16,7 +17,7 @@ from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 
-load_dotenv()  # reads .env file into environment variables
+load_dotenv()
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
@@ -24,7 +25,7 @@ from train import load_best_model
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-NEBIUS_MODEL = "Qwen/Qwen3.5-397B-A17B"
+NEBIUS_MODEL = "deepseek-ai/DeepSeek-V3.2"
 
 REQUIRED_FEATURES = {
     "Pregnancies":              "number of pregnancies",
@@ -39,57 +40,90 @@ REQUIRED_FEATURES = {
 
 # ── LLM helpers ──────────────────────────────────────────────────────────────
 
-def extract_features(client: OpenAI, conversation: list) -> dict:
+def extract_new_values(client: OpenAI, user_message: str, known: dict) -> dict:
     """
-    Ask Llama to extract diabetes features from the conversation so far.
-    Returns a dict of feature name → value if all 8 are found,
-    or {"_followup": "..."} if the model needs more information.
-
-    Nebius uses the OpenAI-compatible format: the system prompt goes as the
-    first message with role "system", followed by the conversation history.
+    Ask the LLM to extract any feature values mentioned in the latest user message.
+    Returns a dict of newly found feature name → value (may be empty if none found).
+    Already-known features are listed so the model knows what's still needed.
     """
     feature_list = "\n".join(
         f"  - {name}: {desc}" for name, desc in REQUIRED_FEATURES.items()
     )
+    known_str = json.dumps(known) if known else "none yet"
+    missing = [name for name in REQUIRED_FEATURES if name not in known]
+    missing_str = ", ".join(missing) if missing else "none — all collected"
+
     system_prompt = f"""You are a medical data extraction assistant.
-Your job is to extract exactly these 8 features from the user's messages:
+Extract values for these 8 diabetes features from the user's message:
 {feature_list}
 
-Rules:
-- If you can extract ALL 8 features confidently, respond with ONLY valid JSON,
-  no extra text. Example: {{"Pregnancies": 2, "Glucose": 140, ...}}
-- If any feature is missing or unclear, respond with a friendly question asking
-  only for the missing information. Do NOT produce JSON until all 8 are known.
-- Never make up or guess values. Only use what the user explicitly stated.
-- Pregnancies must be 0 for males — if the user says they are male, set it to 0."""
+Already collected: {known_str}
+Still needed: {missing_str}
 
-    messages = [{"role": "system", "content": system_prompt}] + conversation
+Rules:
+- Extract ONLY values the user explicitly states in this message.
+- NEVER guess or infer values not clearly stated.
+- Pregnancies must be 0 if the user says they are male.
+- Respond with ONLY a JSON object of newly found values. Example: {{"Glucose": 140, "Age": 45}}
+- If nothing new is extractable, respond with {{}}
+- Do not include already-collected features unless the user is correcting them."""
 
     response = client.chat.completions.create(
         model=NEBIUS_MODEL,
-        max_tokens=512,
-        temperature=0.6,
-        top_p=0.65,
-        messages=messages,
+        max_tokens=256,
+        temperature=0.1,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
     )
-    text = response.choices[0].message.content.strip()
+    text = (response.choices[0].message.content or "").strip()
+
+    # Strip markdown code fences
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
 
     try:
-        data = json.loads(text)
-        if all(k in data for k in REQUIRED_FEATURES):
-            return data
+        return json.loads(text)
     except json.JSONDecodeError:
-        pass
+        return {}
 
-    return {"_followup": text}
+
+def ask_for_missing(client: OpenAI, known: dict, conversation: list) -> str:
+    """Ask the LLM to generate a friendly follow-up question for the missing features."""
+    missing = {
+        name: desc for name, desc in REQUIRED_FEATURES.items() if name not in known
+    }
+    missing_str = "\n".join(f"  - {name}: {desc}" for name, desc in missing.items())
+    known_str = "\n".join(f"  - {name}: {known[name]}" for name in known)
+
+    system_prompt = f"""You are a friendly medical assistant collecting health information.
+
+Already collected:
+{known_str if known_str else '  (nothing yet)'}
+
+Still needed:
+{missing_str}
+
+Ask the user for the missing values in a single, short, friendly message.
+Do not repeat values already collected. Do not make up values."""
+
+    response = client.chat.completions.create(
+        model=NEBIUS_MODEL,
+        max_tokens=256,
+        temperature=0.6,
+        messages=[{"role": "system", "content": system_prompt}]
+        + conversation[-4:],  # last 2 exchanges for tone context
+    )
+    return (response.choices[0].message.content or "").strip()
 
 
 def explain_prediction(client: OpenAI, features: dict, prediction: int,
                        probability: float) -> str:
-    """
-    Ask Llama to explain the model's prediction in plain English.
-    This is a single-turn call — no conversation history needed.
-    """
+    """Ask the LLM to explain the model's prediction in plain English."""
     risk = "high" if prediction == 1 else "low"
     prompt = f"""A diabetes risk model produced this result for a patient:
 - Prediction: {risk} risk of diabetes
@@ -104,21 +138,16 @@ Write a clear, empathetic 3-4 sentence response that:
 
     response = client.chat.completions.create(
         model=NEBIUS_MODEL,
-        max_tokens=300,
+        max_tokens=512,
         temperature=0.6,
-        top_p=0.65,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.choices[0].message.content.strip()
+    return (response.choices[0].message.content or "").strip()
 
 # ── Inference ────────────────────────────────────────────────────────────────
 
 def run_inference(model, scaler, features: dict) -> tuple[int, float]:
-    """
-    Scale raw feature values using the training scaler, then predict.
-    The scaler must match the one used during training — that's why we save
-    and load it alongside the model in best_model.pkl.
-    """
+    """Scale raw feature values and run the ML model."""
     ordered = [features[k] for k in REQUIRED_FEATURES]
     X = np.array(ordered).reshape(1, -1)
     X_scaled = scaler.transform(X)
@@ -130,16 +159,14 @@ def run_inference(model, scaler, features: dict) -> tuple[int, float]:
 
 def main():
     st.set_page_config(page_title="Diabetes Risk Prediction", page_icon="🩺")
-    st.title("🩺 Diabetes Risk Prediction")
+    st.title("Diabetes Risk Prediction")
     st.caption("Describe your health information in plain English and I'll assess your diabetes risk.")
 
-    # Check for API key
     api_key = os.environ.get("NEBIUS_API_KEY")
     if not api_key:
         st.error("NEBIUS_API_KEY environment variable is not set.")
         st.stop()
 
-    # Load model once and cache it across reruns
     @st.cache_resource
     def get_model():
         return load_best_model("best_model.pkl")
@@ -147,7 +174,7 @@ def main():
     try:
         model, scaler = get_model()
     except FileNotFoundError:
-        st.error("No trained model found. Run `python src/train.py` first to train and save a model.")
+        st.error("No trained model found. Run `python src/train.py` first.")
         st.stop()
 
     client = OpenAI(
@@ -155,9 +182,10 @@ def main():
         base_url="https://api.tokenfactory.us-central1.nebius.com/v1/",
     )
 
-    # Session state holds the full conversation for multi-turn context
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "known_features" not in st.session_state:
+        st.session_state.known_features = {}
 
     # Display chat history
     for msg in st.session_state.messages:
@@ -183,20 +211,19 @@ def main():
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                result = extract_features(client, st.session_state.messages)
+                # Extract any new values from this message and merge with what we know
+                new_values = extract_new_values(
+                    client, user_input, st.session_state.known_features
+                )
+                st.session_state.known_features.update(new_values)
+                known = st.session_state.known_features
 
-            if "_followup" in result:
-                # LLM needs more information — show its follow-up question
-                reply = result["_followup"]
-                st.markdown(reply)
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-
-            else:
-                # All 8 features extracted — run the ML model
-                prediction, probability = run_inference(model, scaler, result)
+            if len(known) == len(REQUIRED_FEATURES):
+                # All 8 features collected — run the ML model
+                prediction, probability = run_inference(model, scaler, known)
 
                 with st.spinner("Generating explanation..."):
-                    explanation = explain_prediction(client, result, prediction, probability)
+                    explanation = explain_prediction(client, known, prediction, probability)
 
                 if prediction == 1:
                     st.error(f"**High diabetes risk** ({probability:.1%} probability)")
@@ -207,12 +234,27 @@ def main():
 
                 with st.expander("Features used for prediction"):
                     for name, desc in REQUIRED_FEATURES.items():
-                        st.write(f"**{desc}:** {result[name]}")
+                        st.write(f"**{desc}:** {known[name]}")
 
                 st.session_state.messages.append({"role": "assistant", "content": explanation})
 
+            else:
+                # Still missing values — ask for them
+                collected = len(known)
+                total = len(REQUIRED_FEATURES)
+
+                with st.spinner("..."):
+                    reply = ask_for_missing(client, known, st.session_state.messages)
+
+                progress = f"*({collected}/{total} values collected)*\n\n"
+                st.markdown(progress + reply)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": progress + reply}
+                )
+
     if st.session_state.messages and st.button("Start over"):
         st.session_state.messages = []
+        st.session_state.known_features = {}
         st.rerun()
 
 

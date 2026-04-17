@@ -75,3 +75,16 @@ python detect_drift.py data/reference.csv data/current.csv
 ```
 
 In production, replace `data/current.csv` with a fresh export of recent incoming data to monitor for real distributional shift over time.
+
+---
+
+## Script Overview (`detect_drift.py`)
+
+| Function | Purpose |
+|---|---|
+| `check_drift(reference_path, current_path)` | Loads both CSVs, runs Evidently `DataDriftPreset`, parses per-feature p-values and overall drift share |
+| Status thresholds | OK < 20% drifted · Warning 20–39% · Critical ≥ 40% |
+| Outputs | Console summary, `reports/drift_check_report.html`, `reports/drift_check_result.json` |
+| Exit code | `0` = OK or Warning · `1` = Critical (suitable for CI/CD gating) |
+
+**Note:** The script uses the Evidently v0.7+ API (`metrics[0]["value"]` for summary, `metrics[1+]["value"]` for per-column p-values). Earlier Evidently versions used a different dict structure (`result["metrics"][0]["result"]`) which would cause a `KeyError`.

@@ -11,7 +11,7 @@ from preprocess import preprocess_data
 from train import build_model, compute_data_version, log_config_params
 from evaluation import evaluate_model
 
-TRACKING_URL = 'sqlite:///mlruns.db'
+TRACKING_URL = f"sqlite:///{Path(__file__).parent / 'mlflow.db'}"
 EXPERIMENT_NAME = "diabetes_classification"
 BASE_CONFIG_PATH = 'configs/config.yaml'
 
@@ -79,7 +79,7 @@ def run_all_experiments(configs: List[Dict]) -> List[str]:
     mlflow.set_experiment(EXPERIMENT_NAME)
 
     data_path = configs[0].get('data_path', 'data/diabetes.csv')
-    X_train, X_test, y_train, y_test = preprocess_data(data_path)
+    X_train, X_test, y_train, y_test, _ = preprocess_data(data_path)
     data_version = compute_data_version(data_path)
 
     run_ids = []
@@ -135,9 +135,24 @@ def compare_experiments(primary_metric: str = "f1_score") -> None:
     summary.columns = ["avg_f1", "best_f1", "num_runs"]
     print(summary.sort_values("best_f1", ascending=False).to_string())
 
+def save_best_model(run_id: str, output_path: str) -> None:
+    """Download the best model artifact from MLflow and save it locally."""
+    mlflow.set_tracking_uri(TRACKING_URL)
+    client = mlflow.tracking.MlflowClient()
+    local_path = client.download_artifacts(run_id, "model")
+    model_files = list(Path(local_path).glob("*.pkl"))
+    if not model_files:
+        raise RuntimeError(f"No model file found in artifacts for run {run_id}.")
+    model_file = model_files[0]
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    model_file.rename(output_path)
+    print(f"Best model saved to: {output_path}")
+
 
 if __name__ == "__main__":
     base_config = load_base_config()
     configs = build_experiment_variants(base_config)
     run_all_experiments(configs)
     compare_experiments(primary_metric="f1_score")
+    best_run_id = mlflow.search_runs(experiment_ids=[mlflow.get_experiment_by_name(EXPERIMENT_NAME).experiment_id], 
+                                     order_by=["metrics.f1_score DESC"], max_results=1).iloc[0]["run_id"]
